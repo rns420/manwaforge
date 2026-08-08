@@ -71,6 +71,22 @@ class BossAgent {
             let videoData = window.PipelineState.getStepData('video_built');
             let seoData = window.PipelineState.getStepData('seo_published');
 
+            // Strict Validation of Checkpoint Data
+            if (storyData && (!storyData.episodes || storyData.episodes.length === 0 || !storyData.episodes.some(e => e.scenes && e.scenes.length > 0))) {
+                this.app?.appendLog('BossAgent', '⚠️ Saved story checkpoint is invalid/empty. Invalidating story checkpoint...', 'warning');
+                storyData = null;
+                assetsData = null;
+                videoData = null;
+                seoData = null;
+            }
+
+            if (assetsData && (!assetsData.imageData || assetsData.imageData.length === 0 || !assetsData.audioData || assetsData.audioData.length === 0)) {
+                this.app?.appendLog('BossAgent', '⚠️ Saved assets checkpoint is empty. Invalidating assets checkpoint...', 'warning');
+                assetsData = null;
+                videoData = null;
+                seoData = null;
+            }
+
             // 1. STORY GENERATION & REVIEW
             if (!storyData) {
                 this.updateUI(10, 'Running StoryForge (Agent 1)...');

@@ -426,34 +426,44 @@ Return strictly the prompt string, nothing else.`;
       storyData.episodes = [];
       this.updateProgress(25, `Generated original story outline: ${storyData.title}`);
 
-      for (let epNum = 1; epNum <= 3; epNum++) {
+      const totalEpisodes = window.ManhwaConfig?.pipeline?.episodeCount || 3;
+      const targetScenesPerEp = window.ManhwaConfig?.pipeline?.scenesPerEpisode || 250;
+      const batchSize = Math.min(25, targetScenesPerEp);
+      const totalBatches = Math.ceil(targetScenesPerEp / batchSize);
+
+      for (let epNum = 1; epNum <= totalEpisodes; epNum++) {
         const epOutline = await this.generateEpisodeOutline(storyData, epNum);
         epOutline.episodeNum = epNum;
         epOutline.scenes = [];
-        this.updateProgress(30 + (epNum-1)*20, `Generated outline for Episode ${epNum}`);
+        this.updateProgress(30 + (epNum-1)*(50/totalEpisodes), `Generated outline for Episode ${epNum}`);
         
-        for (let batch = 0; batch < 10; batch++) {
-          const startScene = batch * 25 + 1;
-          const endScene = batch * 25 + 25;
+        for (let batch = 0; batch < totalBatches; batch++) {
+          const startScene = batch * batchSize + 1;
+          const endScene = Math.min((batch + 1) * batchSize, targetScenesPerEp);
           const scenes = await this.generateSceneBatch(epOutline, epNum, startScene, endScene);
-          epOutline.scenes.push(...scenes);
+          if (Array.isArray(scenes)) {
+            epOutline.scenes.push(...scenes);
+          }
           
           this.updateProgress(
-            30 + (epNum-1)*20 + ((batch+1)/10)*15, 
+            30 + ((epNum-1)/totalEpisodes)*50 + ((batch+1)/totalBatches)*(50/totalEpisodes), 
             `Episode ${epNum}, scenes ${startScene}-${endScene} generated`
           );
           
-          // Save checkpoint
           localStorage.setItem(`storyforge_checkpoint_ep${epNum}_batch${batch}`, JSON.stringify(scenes));
         }
         
         storyData.episodes.push(epOutline);
         
-        // Generate SEO metadata (upload happens later via BossAgent after video is created)
+        // Generate SEO metadata
         this.updateProgress(85 + (epNum * 3), `Generating SEO for Episode ${epNum}`);
-        const seoData = await this.generateSEOForEpisode(storyData, epNum);
-        epOutline.seo = seoData;
-        this.log(`SEO generated for Episode ${epNum}: "${seoData.title}"`);
+        try {
+          const seoData = await this.generateSEOForEpisode(storyData, epNum);
+          epOutline.seo = seoData;
+          this.log(`SEO generated for Episode ${epNum}: "${seoData.title}"`);
+        } catch (seoErr) {
+          this.log(`SEO generation skipped for Episode ${epNum}: ${seoErr.message}`);
+        }
       }
       
       this.updateProgress(100, "StoryForge Agent Completed");
