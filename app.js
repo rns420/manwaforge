@@ -288,6 +288,7 @@ class ManhwaForge {
   // Pipeline
   async runPipeline() {
     if (this.pipelineRunning) { this.showToast('Pipeline already running!','warning'); return; }
+    this.resetPipeline();
     if (!this.bossAgent) { try { this.initAgents(); } catch (e) { this.showToast(`Init failed: ${e.message}`,'error'); return; } }
     this.pipelineRunning = true;
     const btn = document.getElementById('btn-run');
