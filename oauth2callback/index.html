@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ManhwaForge — YouTube Authorization</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #050510;
+      color: #f8fafc;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+    .card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      backdrop-filter: blur(20px);
+      border-radius: 16px;
+      padding: 40px;
+      max-width: 500px;
+      text-align: center;
+    }
+    .card h1 { font-size: 24px; margin-bottom: 12px; }
+    .card p { color: #94a3b8; margin-bottom: 20px; }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid rgba(255,255,255,0.1);
+      border-top: 3px solid #7c3aed;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .success { color: #10b981; font-weight: 600; }
+    .error { color: #ef4444; font-weight: 600; }
+    code {
+      display: block;
+      background: rgba(0,0,0,0.4);
+      padding: 12px;
+      border-radius: 8px;
+      word-break: break-all;
+      margin-top: 12px;
+      font-size: 12px;
+      color: #06b6d4;
+    }
+  </style>
+</head>
+<body>
+  <div class="card" id="card">
+    <div class="spinner" id="spinner"></div>
+    <h1>🎭 YouTube Authorization</h1>
+    <p id="status">Exchanging authorization code for tokens...</p>
+  </div>
+
+  <script>
+    (async function handleOAuthCallback() {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+      const error = params.get('error');
+      const statusEl = document.getElementById('status');
+      const spinnerEl = document.getElementById('spinner');
+
+      if (error) {
+        spinnerEl.style.display = 'none';
+        statusEl.innerHTML = `<span class="error">❌ Authorization denied: ${error}</span>`;
+        return;
+      }
+
+      if (!code) {
+        spinnerEl.style.display = 'none';
+        statusEl.innerHTML = '<span class="error">❌ No authorization code received</span>';
+        return;
+      }
+
+      // Exchange code for tokens via backend proxy
+      try {
+        const config = {
+          clientId: 'YOUR_GOOGLE_CLIENT_ID_HERE',
+          clientSecret: 'YOUR_GOOGLE_CLIENT_SECRET_HERE',
+          redirectUri: 'http://localhost:3333/oauth2callback'
+        };
+
+        const res = await fetch('http://localhost:8000/api/yt-exchange-code', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            client_id: config.clientId,
+            client_secret: config.clientSecret,
+            code: code,
+            redirect_uri: config.redirectUri
+          })
+        });
+
+        const data = await res.json();
+
+        if (data.access_token) {
+          // Save tokens to localStorage
+          localStorage.setItem('mf_yt_access_token', data.access_token);
+          if (data.refresh_token) {
+            localStorage.setItem('mf_yt_refresh_token', data.refresh_token);
+          }
+          localStorage.setItem('mf_yt_token_expiry', Date.now() + (data.expires_in * 1000));
+
+          spinnerEl.style.display = 'none';
+          statusEl.innerHTML = `
+            <span class="success">✅ YouTube Connected Successfully!</span>
+            <p style="margin-top:12px;color:#94a3b8;">Access token and refresh token saved. You can close this tab and return to ManhwaForge.</p>
+            <code>Access Token: ${data.access_token.substring(0, 30)}...</code>
+            ${data.refresh_token ? `<code>Refresh Token: ${data.refresh_token.substring(0, 20)}... (saved)</code>` : ''}
+          `;
+
+          // Auto-close after 3 seconds
+          setTimeout(() => {
+            if (window.opener) {
+              window.opener.postMessage({ type: 'yt_auth_success', tokens: data }, '*');
+              window.close();
+            }
+          }, 3000);
+
+        } else {
+          spinnerEl.style.display = 'none';
+          statusEl.innerHTML = `<span class="error">❌ Token exchange failed</span><code>${JSON.stringify(data, null, 2)}</code>`;
+        }
+
+      } catch (err) {
+        spinnerEl.style.display = 'none';
+        statusEl.innerHTML = `<span class="error">❌ Network error: ${err.message}</span>`;
+      }
+    })();
+  </script>
+</body>
+</html>

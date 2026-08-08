@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>YouTube Auth Callback</title>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #050510;
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+    }
+    .card {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      padding: 2rem;
+      text-align: center;
+      max-width: 400px;
+    }
+    .icon { font-size: 3rem; margin-bottom: 1rem; }
+    h2 { color: #06b6d4; margin-bottom: 0.5rem; }
+    p { color: #64748b; }
+    .success { color: #10b981; }
+    .error { color: #ef4444; }
+  </style>
+</head>
+<body>
+<div class="card" id="card">
+  <div class="icon">⏳</div>
+  <h2>Authenticating...</h2>
+  <p>Processing your YouTube authorization.</p>
+</div>
+<script>
+  (function() {
+    var card = document.getElementById('card');
+
+    function showSuccess() {
+      card.innerHTML = '<div class="icon">✅</div><h2 class="success">Connected!</h2><p>YouTube account authorized successfully. This window will close shortly.</p>';
+    }
+
+    function showError(msg) {
+      card.innerHTML = '<div class="icon">❌</div><h2 class="error">Authorization Failed</h2><p>' + msg + '</p>';
+    }
+
+    // Parse hash fragment (implicit flow: #access_token=...&expires_in=...)
+    var hash = window.location.hash;
+    var search = window.location.search;
+
+    if (hash && hash.length > 1) {
+      var params = new URLSearchParams(hash.substring(1));
+      var accessToken = params.get('access_token');
+      var expiresIn = params.get('expires_in');
+      var error = params.get('error');
+
+      if (error) {
+        showError('Google returned error: ' + error);
+        if (window.opener) {
+          window.opener.postMessage({ type: 'mf_youtube_auth', error: error }, '*');
+        }
+        return;
+      }
+
+      if (accessToken) {
+        showSuccess();
+        if (window.opener) {
+          window.opener.postMessage({
+            type: 'mf_youtube_auth',
+            access_token: accessToken,
+            expires_in: expiresIn || '3600'
+          }, '*');
+          setTimeout(function() { window.close(); }, 1500);
+        }
+        return;
+      }
+    }
+
+    // Parse query params (auth-code flow: ?code=...)
+    if (search && search.length > 1) {
+      var qParams = new URLSearchParams(search.substring(1));
+      var code = qParams.get('code');
+      var error = qParams.get('error');
+
+      if (error) {
+        showError('Authorization error: ' + error);
+        if (window.opener) {
+          window.opener.postMessage({ type: 'mf_youtube_auth', error: error }, '*');
+        }
+        return;
+      }
+
+      if (code) {
+        // Auth code flow — need to exchange code for token via backend
+        showSuccess();
+        if (window.opener) {
+          window.opener.postMessage({
+            type: 'mf_youtube_auth',
+            auth_code: code
+          }, '*');
+          setTimeout(function() { window.close(); }, 1500);
+        }
+        return;
+      }
+    }
+
+    // No token found
+    showError('No authorization token received. Please try again.');
+    if (window.opener) {
+      window.opener.postMessage({ type: 'mf_youtube_auth', error: 'no_token' }, '*');
+    }
+  })();
+</script>
+</body>
+</html>

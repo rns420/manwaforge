@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ManhwaForge v3.0 — AI Manhwa Automation Pipeline</title>
+  <meta name="description" content="Automated AI pipeline: scrape manhwa stories, rebuild copyright-free 250-scene episodes, generate images + TTS audio, assemble 45+ min videos, auto-upload to YouTube.">
+  <link rel="stylesheet" href="styles.css">
+
+</head>
+<body>
+  <div id="starfield"></div>
+  <div id="toast-container"></div>
+
+  <div id="rate-limit-banner" class="banner hidden">
+    <span id="rate-limit-msg">⚠️ API rate limit hit — agent paused, resuming shortly...</span>
+    <button onclick="document.getElementById('rate-limit-banner').classList.add('hidden')">✕</button>
+  </div>
+
+  <header class="glass-panel">
+    <div class="logo">
+      <span class="agent-icon">🎭</span>
+      <h1>ManhwaForge v3</h1>
+      <span id="server-status" class="status-indicator offline" title="Python backend status"></span>
+    </div>
+    <div class="header-actions">
+      <button id="btn-settings" class="btn btn-secondary">⚙ Settings</button>
+      <button id="btn-schedule" class="btn btn-secondary">🕐 Schedule</button>
+      <button id="btn-reset" class="btn btn-secondary">🔄 Reset</button>
+      <button id="btn-run" class="btn btn-primary">▶ Run Pipeline</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="pipeline-section">
+      <!-- 4 Agent Cards (SEO merged into Agent 1) -->
+      <div class="agent-cards-container">
+
+        <div class="agent-card glass-panel" id="agent-story">
+          <div class="agent-header">
+            <span class="agent-icon">✍️</span>
+            <div class="agent-info">
+              <h3>StoryForge + SEO</h3>
+              <span class="badge badge-idle" id="badge-story">Idle</span>
+            </div>
+          </div>
+          <div class="agent-task" id="task-story">Agent 1 — Story + YouTube SEO</div>
+          <div class="scene-counter" id="counter-story"></div>
+          <div class="progress-bar-container">
+            <div class="progress-bar" id="progress-story" style="width:0%"></div>
+          </div>
+        </div>
+
+        <div class="pipeline-arrow" id="arrow-1">➔</div>
+
+        <div class="agent-card glass-panel" id="agent-images">
+          <div class="agent-header">
+            <span class="agent-icon">🎨</span>
+            <div class="agent-info">
+              <h3>PanelArtist</h3>
+              <span class="badge badge-idle" id="badge-images">Idle</span>
+            </div>
+          </div>
+          <div class="agent-task" id="task-images">Agent 2 — 250 panels/episode</div>
+          <div class="scene-counter" id="counter-images"></div>
+          <div class="progress-bar-container">
+            <div class="progress-bar" id="progress-images" style="width:0%"></div>
+          </div>
+        </div>
+
+        <div class="pipeline-arrow" id="arrow-2">➔</div>
+
+        <div class="agent-card glass-panel" id="agent-audio">
+          <div class="agent-header">
+            <span class="agent-icon">🎙️</span>
+            <div class="agent-info">
+              <h3>VoiceCraft</h3>
+              <span class="badge badge-idle" id="badge-audio">Idle</span>
+            </div>
+          </div>
+          <div class="agent-task" id="task-audio">Agent 3 — TTS narration</div>
+          <div class="scene-counter" id="counter-audio"></div>
+          <div class="progress-bar-container">
+            <div class="progress-bar" id="progress-audio" style="width:0%"></div>
+          </div>
+        </div>
+
+        <div class="pipeline-arrow" id="arrow-3">➔</div>
+
+        <div class="agent-card glass-panel" id="agent-video">
+          <div class="agent-header">
+            <span class="agent-icon">🎬</span>
+            <div class="agent-info">
+              <h3>VideoForge</h3>
+              <span class="badge badge-idle" id="badge-video">Idle</span>
+            </div>
+          </div>
+          <div class="agent-task" id="task-video">Agent 4 — 45+ min video</div>
+          <div class="scene-counter" id="counter-video"></div>
+          <div class="progress-bar-container">
+            <div class="progress-bar" id="progress-video" style="width:0%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Boss Agent status bar -->
+      <div class="boss-bar glass-panel" id="agent-boss">
+        <span>👁️ <strong>BossAgent:</strong></span>
+        <span id="task-boss" class="boss-task">Agent 5 — Quality Review &amp; Orchestration</span>
+        <div class="progress-bar-container boss-progress">
+          <div class="progress-bar" id="progress-boss" style="width:0%"></div>
+        </div>
+        <span class="badge badge-idle" id="badge-boss">Idle</span>
+      </div>
+
+      <!-- Pipeline Stats -->
+      <div class="pipeline-stats glass-panel">
+        <div class="stat"><span class="stat-label">Episodes</span><span id="stat-episodes" class="stat-value">0/3</span></div>
+        <div class="stat"><span class="stat-label">Scenes</span><span id="stat-scenes" class="stat-value">0/750</span></div>
+        <div class="stat"><span class="stat-label">Images</span><span id="stat-images" class="stat-value">0/750</span></div>
+        <div class="stat"><span class="stat-label">Audio</span><span id="stat-audio" class="stat-value">0/750</span></div>
+        <div class="stat"><span class="stat-label">Video Length</span><span id="stat-video-length" class="stat-value">0 min</span></div>
+      </div>
+    </section>
+
+    <section class="content-section glass-panel">
+      <nav class="tabs">
+        <button class="tab-btn active" data-target="tab-story">📖 Story</button>
+        <button class="tab-btn" data-target="tab-gallery">🖼️ Gallery</button>
+        <button class="tab-btn" data-target="tab-audio">🎵 Audio</button>
+        <button class="tab-btn" data-target="tab-video">🎬 Video</button>
+        <button class="tab-btn" data-target="tab-seo">📈 YouTube SEO</button>
+        <button class="tab-btn" data-target="tab-logs">📋 Logs</button>
+      </nav>
+
+      <div class="tab-content active" id="tab-story">
+        <div class="story-container">
+          <div class="story-header">
+            <select id="episode-selector" class="input-field episode-select">
+              <option>No story yet — run pipeline first</option>
+            </select>
+            <div id="story-characters" class="story-chars">Characters: —</div>
+          </div>
+          <div id="story-synopsis" class="story-synopsis">Run the pipeline to generate a 750-scene copyright-free manhwa story...</div>
+          <div id="story-body" class="story-body">
+            <div class="empty-state"><span class="empty-icon">✍️</span><p>No story generated yet. Click <strong>▶ Run Pipeline</strong>.</p></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-gallery">
+        <div class="gallery-grid" id="image-gallery">
+          <div class="empty-state"><span class="empty-icon">🎨</span><p>No images yet. 250 panels per episode will be generated.</p></div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-audio">
+        <div class="audio-list" id="audio-player-list">
+          <div class="empty-state"><span class="empty-icon">🎙️</span><p>No audio yet. 250 narration clips per episode will be generated.</p></div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-video">
+        <div class="video-container">
+          <div id="video-placeholder" class="video-placeholder">
+            <span class="empty-icon">🎬</span><p>45+ minute video will appear here</p>
+          </div>
+          <video id="main-video-player" controls preload="none" style="display:none"></video>
+          <div style="margin-top:1rem;text-align:center">
+            <button id="btn-download-video" class="btn btn-primary" disabled>⬇ Download Video</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-seo">
+        <div class="seo-container">
+          <div class="yt-connect-status glass-panel" id="yt-status-bar">
+            <span id="yt-status-icon">⭕</span>
+            <span id="yt-status-text">YouTube not connected</span>
+            <button id="btn-connect-youtube" class="btn btn-primary btn-sm">Connect YouTube</button>
+            <button id="btn-disconnect-youtube" class="btn btn-secondary btn-sm" style="display:none">Disconnect</button>
+          </div>
+          <div class="seo-field"><label>📌 Title</label><input type="text" id="seo-title" class="input-field" readonly></div>
+          <div class="seo-field"><label>📝 Description</label><textarea id="seo-description" class="input-field" rows="6" readonly></textarea></div>
+          <div class="seo-field"><label>🏷️ Tags</label><textarea id="seo-tags" class="input-field" rows="3" readonly></textarea></div>
+          <div class="seo-grid">
+            <div class="seo-field"><label>🖼️ Thumbnail</label><div class="thumbnail-preview" id="seo-thumbnail"><span>Generated by Agent 1</span></div></div>
+            <div class="seo-field"><label>📅 Schedule</label><input type="text" id="seo-schedule" class="input-field" readonly><div style="margin-top:0.5rem;font-size:0.8rem;color:var(--text-muted)">Every 3 days at 6 PM ET</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-logs">
+        <div class="terminal-header"><span>🖥️ Agent Activity Log</span><button onclick="document.getElementById('log-terminal').innerHTML=''" class="btn btn-secondary btn-sm">Clear</button></div>
+        <div class="terminal" id="log-terminal"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Settings Modal -->
+  <div class="modal-overlay hidden" id="modal-settings">
+    <div class="modal glass-panel">
+      <div class="modal-header"><h2>⚙️ Settings</h2><button class="close-modal">✕</button></div>
+      <div class="modal-body">
+        <div class="settings-tabs">
+          <button class="stab active" data-stab="stab-api">API Keys</button>
+          <button class="stab" data-stab="stab-youtube">YouTube</button>
+          <button class="stab" data-stab="stab-pipeline">Pipeline</button>
+        </div>
+
+        <div class="stab-content active" id="stab-api">
+          <p class="settings-note">💡 No keys needed! Groq + OpenRouter + Pollinations + APIFreeLLM provide free unlimited AI.</p>
+          <div class="form-group"><label>Groq API Key <a href="https://console.groq.com" target="_blank" class="link-hint">Free →</a></label><input type="password" id="key-groq" class="input-field" placeholder="gsk_..."></div>
+          <div class="form-group"><label>Deepgram API Key <a href="https://console.deepgram.com" target="_blank" class="link-hint">$200 free →</a></label><input type="password" id="key-deepgram" class="input-field"></div>
+          <div class="form-group"><label>OpenRouter API Key <a href="https://openrouter.ai/keys" target="_blank" class="link-hint">Free →</a></label><input type="password" id="key-openrouter" class="input-field"></div>
+          <div class="form-group"><label>Genre</label><select id="pref-genre" class="input-field"><option value="random">Random</option><option value="fantasy">Fantasy / System</option><option value="action">Action / Hunter</option><option value="romance">Romance</option></select></div>
+          <div class="form-group checkbox-group"><input type="checkbox" id="pref-autorun"><label for="pref-autorun">Auto-Run every 3 days at 6PM ET</label></div>
+        </div>
+
+        <div class="stab-content" id="stab-youtube">
+          <p class="settings-note">🔑 Enter Google OAuth2 credentials for YouTube upload.</p>
+          <div class="form-group"><label>Google Client ID</label><input type="text" id="yt-client-id" class="input-field" placeholder="123...apps.googleusercontent.com"></div>
+          <div class="form-group"><label>Google Client Secret</label><input type="password" id="yt-client-secret" class="input-field"></div>
+          <div class="yt-instructions glass-panel"><h4>📋 Setup</h4><ol><li>Go to <a href="https://console.cloud.google.com" target="_blank">Google Cloud Console</a></li><li>Enable <strong>YouTube Data API v3</strong></li><li>Create <strong>OAuth 2.0 Client ID</strong> (Web app)</li><li>Add redirect URI: <code id="redirect-uri-display"></code></li><li>Paste credentials above → Connect</li></ol></div>
+          <div class="yt-actions"><button id="btn-yt-connect-modal" class="btn btn-primary">🔗 Connect YouTube</button><button id="btn-yt-disconnect-modal" class="btn btn-secondary" style="display:none">Disconnect</button><div id="yt-channel-info" class="yt-channel-info hidden"></div></div>
+        </div>
+
+        <div class="stab-content" id="stab-pipeline">
+          <div class="form-group"><label>Scenes per Episode</label><select id="pref-scenes" class="input-field"><option value="200">200 scenes (~40 min)</option><option value="250" selected>250 scenes (~50 min)</option><option value="300">300 scenes (~60 min)</option></select></div>
+          <div class="form-group"><label>Episodes per Story</label><select id="pref-episodes" class="input-field"><option value="3" selected>3 episodes</option><option value="4">4 episodes</option></select></div>
+          <div class="form-group"><label>Source Site</label><select id="pref-source" class="input-field"><option value="random">Random</option><option value="Webtoons">Webtoons</option><option value="Tapas">Tapas</option><option value="Manta">Manta</option><option value="Toonmics">Toonmics</option></select></div>
+        </div>
+      </div>
+      <div class="modal-footer"><button id="btn-save-settings" class="btn btn-primary">💾 Save</button></div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="config/settings.js"></script>
+
+  <script src="api/groq-api.js"></script>
+  <script src="api/openrouter-api.js"></script>
+  <script src="api/pollinations-api.js"></script>
+  <script src="api/deepgram-api.js"></script>
+  <script src="api/apifreellm-api.js"></script>
+  <script src="api/enally-api.js"></script>
+  <script src="api/aimlapi-api.js"></script>
+  <script src="api/youtube-api.js"></script>
+  <script src="pipeline/rate-limiter.js"></script>
+  <script src="pipeline/pipeline-state.js"></script>
+  <script src="pipeline/queue-manager.js"></script>
+  <script src="agents/agent1-story.js"></script>
+  <script src="agents/agent2-images.js"></script>
+  <script src="agents/agent3-audio.js"></script>
+  <script src="agents/agent4-video.js"></script>
+  <script src="agents/agent5-boss.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
