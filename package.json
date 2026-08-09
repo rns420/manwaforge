@@ -1,0 +1,16 @@
+{
+  "name": "manhwaforge",
+  "version": "3.0.0",
+  "description": "AI Manhwa Automation Pipeline (Full-Stack Railway Deployable)",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "postinstall": "cd server && npm install && node node_modules/ffmpeg-static/install.js"
+  },
+  "dependencies": {
+    "ffmpeg-static": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

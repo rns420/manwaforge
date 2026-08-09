@@ -3,9 +3,10 @@ const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
 
-const PORT = 8000;
+const PORT = process.env.PORT || 8000;
 const TEMP_DIR = path.join(__dirname, 'temp');
 const OUTPUT_DIR = path.join(__dirname, 'output');
+const PUBLIC_DIR = path.join(__dirname, '..');
 
 if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 if (!fs.existsSync(OUTPUT_DIR)) fs.mkdirSync(OUTPUT_DIR, { recursive: true });
@@ -318,6 +319,31 @@ async function processRealVideoJob(jobId, body) {
     const message = typeof body.message === 'object' ? JSON.stringify(body.message) : body.message;
     console.log(`[${time}] [FRONTEND] [${source}] [${level}] ${message}`);
     return sendJSON(res, 200, { ok: true });
+  }
+
+  // Static file serving for Frontend dashboard (Railway single-service deploy)
+  let reqPath = pathname === '/' ? '/index.html' : pathname;
+  let filePath = path.join(PUBLIC_DIR, reqPath);
+  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeTypes = {
+      '.html': 'text/html',
+      '.css': 'text/css',
+      '.js': 'application/javascript',
+      '.json': 'application/json',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.svg': 'image/svg+xml',
+      '.ico': 'image/x-icon',
+      '.mp3': 'audio/mpeg',
+      '.mp4': 'video/mp4',
+      '.wav': 'audio/wav'
+    };
+    const contentType = mimeTypes[ext] || 'application/octet-stream';
+    res.writeHead(200, { 'Content-Type': contentType, 'Access-Control-Allow-Origin': '*' });
+    fs.createReadStream(filePath).pipe(res);
+    return;
   }
 
   // Fallback 404

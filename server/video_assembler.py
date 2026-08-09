@@ -53,6 +53,7 @@ class VideoAssembler:
             '-i', image_path,
             '-vf', vf,
             '-c:v', 'libx264',
+            '-preset', 'ultrafast',
             '-t', str(duration),
             '-pix_fmt', 'yuv420p',
             '-r', '25',

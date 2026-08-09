@@ -33,7 +33,7 @@ window.ManhwaConfig = {
     deepgramTTS: 'https://api.deepgram.com/v1/speak',
 
     // Backend
-    pythonServer: 'http://localhost:8000',
+    pythonServer: (typeof window !== 'undefined' && window.location && window.location.origin && !window.location.origin.includes('file://')) ? window.location.origin : 'http://localhost:8000',
   },
 
   models: {
