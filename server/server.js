@@ -57,6 +57,17 @@ const server = http.createServer(async (req, res) => {
     return sendJSON(res, 200, { status: 'ok', version: '1.0' });
   }
 
+  // Config / Env Keys endpoint for Railway environment variables
+  if (pathname === '/api/config' && req.method === 'GET') {
+    return sendJSON(res, 200, {
+      groq: process.env.GROQ_API_KEY || process.env.GROQ_KEY || '',
+      deepgram: process.env.DEEPGRAM_API_KEY || process.env.DEEPGRAM_KEY || '',
+      openrouter: process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_KEY || '',
+      ytClientId: process.env.YOUTUBE_CLIENT_ID || '',
+      ytClientSecret: process.env.YOUTUBE_CLIENT_SECRET || ''
+    });
+  }
+
   // Scrape stories
   if (pathname === '/api/scrape-stories' && req.method === 'GET') {
     const site = parsedUrl.searchParams.get('site') || 'Webtoons';

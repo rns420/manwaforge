@@ -17,6 +17,7 @@ class ManhwaForge {
     this.bossAgent  = null;
 
     this.syncSettingsToConfig();
+    this.fetchRailwayConfig();
     this.initEventListeners();
     this.initSettingsTabs();
     this.checkServerHealth();
@@ -88,6 +89,27 @@ class ManhwaForge {
     c.pipeline.scenesPerEpisode = parseInt(this.settings.scenes) || 250;
     c.pipeline.episodeCount     = parseInt(this.settings.episodes) || 3;
     c.pipeline.sourceGenre      = this.settings.genre;
+  }
+
+  async fetchRailwayConfig() {
+    try {
+      const res = await fetch(`${window.ManhwaConfig?.endpoints?.pythonServer || ''}/api/config`);
+      if (res.ok) {
+        const envKeys = await res.json();
+        if (!window.ManhwaConfig) return;
+        if (envKeys.groq && !envKeys.groq.includes('YOUR_')) window.ManhwaConfig.keys.groq = envKeys.groq;
+        if (envKeys.deepgram && !envKeys.deepgram.includes('YOUR_')) window.ManhwaConfig.keys.deepgram = envKeys.deepgram;
+        if (envKeys.openrouter && !envKeys.openrouter.includes('YOUR_')) window.ManhwaConfig.keys.openrouter = envKeys.openrouter;
+        if (envKeys.ytClientId && !envKeys.ytClientId.includes('YOUR_')) {
+          if (!window.ManhwaConfig.youtube) window.ManhwaConfig.youtube = {};
+          window.ManhwaConfig.youtube.clientId = envKeys.ytClientId;
+        }
+        if (envKeys.ytClientSecret && !envKeys.ytClientSecret.includes('YOUR_')) {
+          if (!window.ManhwaConfig.youtube) window.ManhwaConfig.youtube = {};
+          window.ManhwaConfig.youtube.clientSecret = envKeys.ytClientSecret;
+        }
+      }
+    } catch (e) {}
   }
 
   initAgents() {
