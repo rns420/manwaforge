@@ -94,23 +94,115 @@ const server = http.createServer(async (req, res) => {
     return sendJSON(res, 200, stories);
   }
 
+const ffmpegPath = require('ffmpeg-static');
+const { execFile } = require('child_process');
+
+function runFFmpeg(args) {
+  return new Promise((resolve) => {
+    execFile(ffmpegPath, ['-y', ...args], (err) => {
+      if (err) resolve(false);
+      else resolve(true);
+    });
+  });
+}
+
+function downloadImage(url, destPath) {
+  return new Promise((resolve) => {
+    if (!url || !url.startsWith('http')) return resolve(false);
+    const httpLib = url.startsWith('https') ? require('https') : require('http');
+    const file = fs.createWriteStream(destPath);
+    httpLib.get(url, (res) => {
+      res.pipe(file);
+      file.on('finish', () => { file.close(() => resolve(true)); });
+    }).on('error', () => {
+      fs.unlink(destPath, () => {});
+      resolve(false);
+    });
+  });
+}
+
+async function processRealVideoJob(jobId, body) {
+  try {
+    const panels = body.panels || [];
+    const storyTitle = body.story_title || 'Manhwa Story';
+    const clips = [];
+    
+    // Create title clip
+    const titleOut = path.join(TEMP_DIR, `${jobId}_title.mp4`);
+    const safeTitle = storyTitle.replace(/'/g, '').replace(/:/g, '');
+    await runFFmpeg([
+      '-f', 'lavfi', '-i', 'color=c=black:s=1920x1080:d=2',
+      '-vf', `drawtext=text='${safeTitle}':fontcolor=white:fontsize=72:x=(w-text_w)/2:y=(h-text_h)/2`,
+      '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', titleOut
+    ]);
+    if (fs.existsSync(titleOut)) clips.push(titleOut);
+
+    // Process panel clips
+    const total = panels.length || 1;
+    for (let i = 0; i < panels.length; i++) {
+      const p = panels[i];
+      const imgUrl = p.image_url || p.url || p.imageUrl;
+      const dur = p.duration || 11.0;
+      const imgFile = path.join(TEMP_DIR, `${jobId}_panel_${i}.jpg`);
+      const clipOut = path.join(TEMP_DIR, `${jobId}_clip_${i}.mp4`);
+      
+      const downloaded = await downloadImage(imgUrl, imgFile);
+      const inputPath = downloaded ? imgFile : titleOut;
+      const zoomEffect = i % 2 === 0 ? "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,zoompan=z='min(zoom+0.0015,1.3)':d=275:s=1920x1080" : "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,zoompan=z='1.3':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=275:s=1920x1080";
+      
+      await runFFmpeg([
+        '-loop', '1', '-i', inputPath,
+        '-vf', zoomEffect,
+        '-c:v', 'libx264', '-preset', 'ultrafast', '-t', String(dur), '-pix_fmt', 'yuv420p', '-r', '25',
+        clipOut
+      ]);
+
+      if (fs.existsSync(clipOut)) clips.push(clipOut);
+      if (jobs[jobId]) jobs[jobId].progress = Math.min(90, Math.floor(((i + 1) / total) * 80));
+    }
+
+    // Create Outro clip
+    const outroOut = path.join(TEMP_DIR, `${jobId}_outro.mp4`);
+    await runFFmpeg([
+      '-f', 'lavfi', '-i', 'color=c=black:s=1920x1080:d=4',
+      '-vf', "drawtext=text='Subscribe for Episode 2':fontcolor=white:fontsize=64:x=(w-text_w)/2:y=(h-text_h)/2",
+      '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', outroOut
+    ]);
+    if (fs.existsSync(outroOut)) clips.push(outroOut);
+
+    // Concatenate clips
+    const listFile = path.join(TEMP_DIR, `${jobId}_list.txt`);
+    const listContent = clips.map(c => `file '${c.replace(/\\/g, '/')}'`).join('\n');
+    fs.writeFileSync(listFile, listContent);
+
+    const finalVideoPath = path.join(OUTPUT_DIR, `${jobId}.mp4`);
+    await runFFmpeg([
+      '-f', 'concat', '-safe', '0', '-i', listFile,
+      '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p',
+      finalVideoPath
+    ]);
+
+    if (jobs[jobId]) {
+      jobs[jobId].status = 'completed';
+      jobs[jobId].progress = 100;
+      jobs[jobId].videoPath = finalVideoPath;
+    }
+  } catch (err) {
+    if (jobs[jobId]) {
+      jobs[jobId].status = 'failed';
+      jobs[jobId].error = err.message;
+    }
+  }
+}
+
   // Create Video
   if (pathname === '/api/create-video' && req.method === 'POST') {
     const body = await parseJSONBody(req);
     const jobId = 'job_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
-    jobs[jobId] = { status: 'processing', progress: 10, videoPath: null, error: null };
+    jobs[jobId] = { status: 'processing', progress: 5, videoPath: null, error: null };
 
-    // Simulate async creation update
-    setTimeout(() => { if (jobs[jobId]) jobs[jobId].progress = 50; }, 1000);
-    setTimeout(() => {
-      if (jobs[jobId]) {
-        const dummyPath = path.join(OUTPUT_DIR, `${jobId}.mp4`);
-        fs.writeFileSync(dummyPath, 'SIMULATED_VIDEO_DATA');
-        jobs[jobId].status = 'completed';
-        jobs[jobId].progress = 100;
-        jobs[jobId].videoPath = dummyPath;
-      }
-    }, 2500);
+    // Process real FFmpeg video job async
+    processRealVideoJob(jobId, body);
 
     return sendJSON(res, 200, { jobId });
   }
