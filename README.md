@@ -17,6 +17,22 @@ Deploy the **entire project (both Frontend Dashboard & Backend FFmpeg Video Engi
 
 ---
 
+## 🔑 Adding API Keys on Railway
+
+You can provide your API keys directly in Railway under your service's **Variables** tab:
+
+| Environment Variable | Description |
+| :--- | :--- |
+| `GROQ_API_KEY` | Groq Llama 3.3 70B key (`gsk_...`) |
+| `DEEPGRAM_API_KEY` | Deepgram TTS key (`79f...`) |
+| `OPENROUTER_API_KEY` | OpenRouter key (`sk-or-v1-...`) |
+| `YOUTUBE_CLIENT_ID` | Google OAuth Client ID |
+| `YOUTUBE_CLIENT_SECRET` | Google OAuth Client Secret |
+
+*(Note: You can also enter API keys directly in the dashboard **Settings Modal** on your live site!)*
+
+---
+
 ## 🛠️ Features
 
 * **Agent 1 (StoryForge)**: Scrapes webtoon premises, analyzes them, and rebuilds 100% original, copyright-free multi-episode manhwa scripts.
