@@ -31,188 +31,192 @@ class StoryForgeAgent {
     return key;
   }
 
-  async callAI(systemPrompt, userPrompt) {
-    this.log('Calling AI...');
+  async callAI(systemPrompt, userPrompt, options = {}) {
+    const requireJSON = options.requireJSON !== false;
+    this.log('Calling AI with multi-provider failover pool...');
+
+    const providers = [
+      { name: 'Groq (Llama 3.3 70B)', type: 'groq', model: 'llama-3.3-70b-versatile' },
+      { name: 'OpenRouter (Gemma 2 9B)', type: 'openrouter', model: 'google/gemma-2-9b-it:free' },
+      { name: 'OpenRouter (Llama 3.3 70B)', type: 'openrouter', model: 'meta-llama/llama-3.3-70b-instruct:free' },
+      { name: 'Pollinations (OpenAI Large)', type: 'pollinations', model: 'openai-large' },
+      { name: 'Pollinations (Qwen Coder)', type: 'pollinations', model: 'qwen-coder' },
+      { name: 'APIFreeLLM (GPT-3.5)', type: 'apifreellm', model: 'gpt-3.5-turbo' },
+      { name: 'Enally AI', type: 'enally', model: 'default' }
+    ];
+
     let lastError = null;
 
-    // 2. Groq
-    try {
-      this.log('Trying Groq...');
-      const apiKey = await this.getApiKey('groq');
-      if (apiKey) {
-        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-          },
-          body: JSON.stringify({
-            model: 'llama-3.3-70b-versatile',
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: userPrompt }
-            ]
-          })
-        });
-        if (res.ok) {
-          const data = await res.json();
-          return data.choices[0].message.content;
-        } else {
-          this.log(`Groq returned status ${res.status}`);
-          if (res.status === 429) {
-            this.log('Groq 429 Rate Limit hit. Waiting 8.5s for token quota reset...');
-            await new Promise(r => setTimeout(r, 8500));
-            const retryRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
-              },
-              body: JSON.stringify({
-                model: 'llama-3.3-70b-versatile',
-                messages: [
-                  { role: 'system', content: systemPrompt },
-                  { role: 'user', content: userPrompt }
-                ]
-              })
-            });
-            if (retryRes.ok) {
-              const retryData = await retryRes.json();
-              return retryData.choices[0].message.content;
+    for (const p of providers) {
+      try {
+        this.log(`Trying provider: ${p.name}...`);
+        let responseText = null;
+
+        if (p.type === 'groq') {
+          const apiKey = await this.getApiKey('groq');
+          if (!apiKey) {
+            this.log('Groq API key missing. Skipping...');
+            continue;
+          }
+          const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+            body: JSON.stringify({
+              model: p.model,
+              messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+              temperature: 0.7
+            })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            responseText = data.choices?.[0]?.message?.content;
+          } else {
+            this.log(`Groq returned HTTP ${res.status}. Switching to next provider...`);
+            if (res.status === 429) {
+              await new Promise(r => setTimeout(r, 2000));
             }
+            continue;
+          }
+        } else if (p.type === 'openrouter') {
+          const apiKey = await this.getApiKey('openrouter');
+          if (!apiKey) {
+            this.log('OpenRouter API key missing. Skipping...');
+            continue;
+          }
+          const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+            body: JSON.stringify({
+              model: p.model,
+              messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }]
+            })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            responseText = data.choices?.[0]?.message?.content;
+          } else {
+            this.log(`OpenRouter returned HTTP ${res.status}. Switching to next provider...`);
+            continue;
+          }
+        } else if (p.type === 'pollinations') {
+          const res = await fetch('https://text.pollinations.ai/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: p.model,
+              messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }]
+            })
+          });
+          if (res.ok) {
+            responseText = await res.text();
+          } else {
+            this.log(`Pollinations returned HTTP ${res.status}. Switching to next provider...`);
+            continue;
+          }
+        } else if (p.type === 'apifreellm') {
+          const res = await fetch('https://apifreellm.com/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: p.model,
+              messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }]
+            })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            responseText = data.choices?.[0]?.message?.content;
+          } else {
+            this.log(`APIFreeLLM returned HTTP ${res.status}. Switching to next provider...`);
+            continue;
+          }
+        } else if (p.type === 'enally') {
+          const res = await fetch('https://ai.enally.in/api.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ system: systemPrompt, prompt: userPrompt })
+          });
+          if (res.ok) {
+            responseText = await res.text();
+          } else {
+            this.log(`Enally AI returned HTTP ${res.status}. Switching to next provider...`);
+            continue;
           }
         }
-      } else {
-          this.log('Groq API key not found.');
-      }
-    } catch (e) {
-      this.log(`Groq failed: ${e.message}`);
-      lastError = e;
-    }
 
-    // 3. apifreellm.com
-    try {
-      this.log('Trying apifreellm.com...');
-      const res = await fetch('https://apifreellm.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'gpt-3.5-turbo',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ]
-        })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        return data.choices[0].message.content;
-      } else {
-          this.log(`apifreellm.com returned status ${res.status}`);
-      }
-    } catch (e) {
-      this.log(`apifreellm.com failed: ${e.message}`);
-      lastError = e;
-    }
-
-    // 4. Pollinations
-    try {
-      this.log('Trying Pollinations...');
-      const res = await fetch('https://text.pollinations.ai/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'openai-large',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ]
-        })
-      });
-      if (res.ok) {
-        const text = await res.text();
-        return text;
-      } else {
-          this.log(`Pollinations returned status ${res.status}`);
-      }
-    } catch (e) {
-      this.log(`Pollinations failed: ${e.message}`);
-      lastError = e;
-    }
-
-    // 5. OpenRouter
-    try {
-      this.log('Trying OpenRouter...');
-      const apiKey = await this.getApiKey('openrouter');
-      if (apiKey) {
-        const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-          },
-          body: JSON.stringify({
-            model: 'google/gemma-2-9b-it:free',
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: userPrompt }
-            ]
-          })
-        });
-        if (res.ok) {
-          const data = await res.json();
-          return data.choices[0].message.content;
-        } else {
-            this.log(`OpenRouter returned status ${res.status}`);
+        if (!responseText || !responseText.trim()) {
+          this.log(`Empty response from ${p.name}. Switching to next provider...`);
+          continue;
         }
-      } else {
-          this.log('OpenRouter API key not found.');
+
+        if (requireJSON) {
+          try {
+            this.parseAIJSON(responseText);
+          } catch (jsonErr) {
+            this.log(`Provider ${p.name} response failed JSON parsing (${jsonErr.message}). Switching to next provider...`);
+            continue;
+          }
+        }
+
+        this.log(`✅ Success from provider: ${p.name}`);
+        return responseText;
+      } catch (err) {
+        this.log(`Provider ${p.name} error: ${err.message}. Switching to next provider...`);
+        lastError = err;
       }
-    } catch (e) {
-      this.log(`OpenRouter failed: ${e.message}`);
-      lastError = e;
     }
 
-    // 6. ai.enally.in
-    try {
-      this.log('Trying ai.enally.in...');
-      const res = await fetch('https://ai.enally.in/api.php', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          system: systemPrompt,
-          prompt: userPrompt
-        })
-      });
-      if (res.ok) {
-        const text = await res.text();
-        return text;
-      } else {
-          this.log(`ai.enally.in returned status ${res.status}`);
-      }
-    } catch (e) {
-      this.log(`ai.enally.in failed: ${e.message}`);
-      lastError = e;
-    }
-
-    throw new Error(`All AI APIs failed. Last error: ${lastError ? lastError.message : 'Unknown'}`);
+    throw new Error(`All AI providers in failover pool failed. Last error: ${lastError ? lastError.message : 'No valid response'}`);
   }
 
-  async parseAIJSON(text) {
+  parseAIJSON(text) {
+    if (!text || typeof text !== 'string') {
+      throw new Error("Invalid or empty text response from AI");
+    }
+
+    let cleaned = text.trim();
+
+    // 1. Remove markdown code block markers
+    cleaned = cleaned.replace(/^```[a-z]*\n?/gi, '').replace(/\n?```$/gi, '').trim();
+
+    // 2. Locate outermost JSON structure ({ ... } or [ ... ])
+    const firstBrace = cleaned.search(/[\{\[]/);
+    const lastCurly = cleaned.lastIndexOf('}');
+    const lastSquare = cleaned.lastIndexOf(']');
+    const lastBrace = Math.max(lastCurly, lastSquare);
+
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+    }
+
+    // Attempt 1: Direct JSON parse
     try {
-      if (!text || typeof text !== 'string') throw new Error("Invalid text response");
-      const match = text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-      if (match) {
-        return JSON.parse(match[0]);
+      return JSON.parse(cleaned);
+    } catch (e1) {
+      // Attempt 2: Sanitize trailing commas and unescaped newlines
+      try {
+        let repaired = cleaned
+          .replace(/,\s*([\}\]])/g, '$1')
+          .replace(/([\{\s,])(\w+):/g, '$1"$2":');
+        return JSON.parse(repaired);
+      } catch (e2) {
+        // Attempt 3: Regex match arrays or objects
+        const arrMatch = text.match(/\[[\s\S]*\]/);
+        const objMatch = text.match(/\{[\s\S]*\}/);
+
+        if (arrMatch) {
+          try {
+            return JSON.parse(arrMatch[0].replace(/,\s*([\}\]])/g, '$1'));
+          } catch (e3) {}
+        }
+        if (objMatch) {
+          try {
+            return JSON.parse(objMatch[0].replace(/,\s*([\}\]])/g, '$1'));
+          } catch (e4) {}
+        }
+
+        this.log(`JSON parse error: ${e1.message}. Response preview: ${text.substring(0, 120)}...`);
+        throw new Error(`Failed to parse AI response as JSON: ${e1.message}`);
       }
-      return JSON.parse(text);
-    } catch (e) {
-      this.log(`JSON parse error: ${e.message}`);
-      throw new Error("Failed to parse AI response as JSON");
     }
   }
 
