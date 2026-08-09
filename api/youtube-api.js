@@ -25,11 +25,11 @@ class YouTubeAPI {
   // ── Getters ──────────────────────────────────────────────────────────────
 
   get clientId() {
-    return localStorage.getItem(this.CLIENT_ID_KEY) || '';
+    return localStorage.getItem(this.CLIENT_ID_KEY) || window.ManhwaConfig?.youtube?.clientId || '';
   }
 
   get clientSecret() {
-    return localStorage.getItem(this.CLIENT_SECRET_KEY) || '';
+    return localStorage.getItem(this.CLIENT_SECRET_KEY) || window.ManhwaConfig?.youtube?.clientSecret || '';
   }
 
   set clientId(val) {

@@ -165,7 +165,6 @@ class ManhwaForge {
     const s = this.settings;
     const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v || ''; };
     set('key-groq', s.groq); set('key-deepgram', s.deepgram); set('key-openrouter', s.openrouter);
-    set('yt-client-id', s.ytClientId); set('yt-client-secret', s.ytClientSecret);
     set('pref-genre', s.genre); set('pref-scenes', String(s.scenes || 250)); set('pref-episodes', String(s.episodes || 3));
     const ar = document.getElementById('pref-autorun'); if (ar) ar.checked = !!s.autorun;
   }
@@ -173,7 +172,6 @@ class ManhwaForge {
   collectAndSaveSettings() {
     const g = (id) => { const e = document.getElementById(id); return e ? e.value.trim() : ''; };
     this.settings.groq = g('key-groq'); this.settings.deepgram = g('key-deepgram'); this.settings.openrouter = g('key-openrouter');
-    this.settings.ytClientId = g('yt-client-id'); this.settings.ytClientSecret = g('yt-client-secret');
     this.settings.genre = g('pref-genre'); this.settings.scenes = parseInt(g('pref-scenes')) || 250;
     this.settings.episodes = parseInt(g('pref-episodes')) || 3;
     this.settings.autorun = document.getElementById('pref-autorun')?.checked || false;
