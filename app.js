@@ -37,17 +37,18 @@ class ManhwaForge {
     this.appendLog('BossAgent', '🆓 Free APIs: Pollinations + apifreellm + Groq + OpenRouter + Enally + AIMLAPI', 'info');
   }
 
-  _d(b) { try { return atob(b); } catch { return ''; } }
+  getSceneCount() { return window.ManhwaConfig?.pipeline?.scenesPerEpisode || 250; }
+  getEpisodeCount() { return window.ManhwaConfig?.pipeline?.episodeCount || 3; }
 
   loadSettings() {
     const kc = window.ManhwaConfig?.keys || {};
     const yt = window.ManhwaConfig?.youtube || {};
     const defaults = {
-      groq: (kc.groq && !kc.groq.includes('YOUR_')) ? kc.groq : this._d('Z3NrX1ozenNLUWNJbDFER0tuSVI3Q1NjV0dkeWJyb0ZYU0xFTXFQY0NoY3NhRDJqWTNvSjk0UFhT'),
-      deepgram: (kc.deepgram && !kc.deepgram.includes('YOUR_')) ? kc.deepgram : this._d('NzlmgjZiOGI1NzhjOGU5MGM2MGRkOGE5NjE0YjUwYWE3Y2ExOGYwOQ=='),
-      openrouter: (kc.openrouter && !kc.openrouter.includes('YOUR_')) ? kc.openrouter : this._d('c2stb3ItdjEtOTY0OTg5MGVhN2MxM2UwNzYyOWU5OTQ5Njk4ZmJmYzI5MGM3ZGRhNDlmNGY2NzlkZGU0ZjNmM2ZhMzc2MTVh'),
-      ytClientId: (yt.clientId && !yt.clientId.includes('YOUR_')) ? yt.clientId : this._d('OTU1MzY5NzAyMjg2LTNka3h2aXVhOWczZDUzZG04MThhNHFpZmQwczFpNGszLmFwcHMuZ29vZ2xldXNlcmNvbnRlbnQuY29t'),
-      ytClientSecret: (yt.clientSecret && !yt.clientSecret.includes('YOUR_')) ? yt.clientSecret : this._d('R09DU1BYLUVFQTA2RnY3SUEzaDlkVW0wRFpPVEJSVzc3UExC'),
+      groq: (kc.groq && !kc.groq.includes('YOUR_')) ? kc.groq : '',
+      deepgram: (kc.deepgram && !kc.deepgram.includes('YOUR_')) ? kc.deepgram : '',
+      openrouter: (kc.openrouter && !kc.openrouter.includes('YOUR_')) ? kc.openrouter : '',
+      ytClientId: (yt.clientId && !yt.clientId.includes('YOUR_')) ? yt.clientId : '',
+      ytClientSecret: (yt.clientSecret && !yt.clientSecret.includes('YOUR_')) ? yt.clientSecret : '',
       genre:'random', autorun:false, episodes:3, scenes:250, nextSchedule:null
     };
     try {
@@ -328,8 +329,6 @@ class ManhwaForge {
     });
     this.updatePipelineStats({});
     this.showToast('Pipeline state reset! All checkpoints cleared.', 'info');
-  }
-    this.showToast('Pipeline reset','info');
   }
 
   schedulePipeline() {

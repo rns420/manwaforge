@@ -58,7 +58,29 @@ class StoryForgeAgent {
           const data = await res.json();
           return data.choices[0].message.content;
         } else {
-            this.log(`Groq returned status ${res.status}`);
+          this.log(`Groq returned status ${res.status}`);
+          if (res.status === 429) {
+            this.log('Groq 429 Rate Limit hit. Waiting 8.5s for token quota reset...');
+            await new Promise(r => setTimeout(r, 8500));
+            const retryRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+              },
+              body: JSON.stringify({
+                model: 'llama-3.3-70b-versatile',
+                messages: [
+                  { role: 'system', content: systemPrompt },
+                  { role: 'user', content: userPrompt }
+                ]
+              })
+            });
+            if (retryRes.ok) {
+              const retryData = await retryRes.json();
+              return retryData.choices[0].message.content;
+            }
+          }
         }
       } else {
           this.log('Groq API key not found.');
@@ -324,7 +346,10 @@ Respond strictly in JSON format as a list of scenes:
   }
 ]`;
     const response = await this.callAI("You are a brilliant manhwa scriptwriter. You strictly return valid JSON arrays.", prompt);
-    const scenes = await this.parseAIJSON(response);
+    let scenes = await this.parseAIJSON(response);
+    if (!Array.isArray(scenes) && typeof scenes === 'object' && scenes !== null) {
+      scenes = scenes.scenes || scenes.sceneList || scenes.data || Object.values(scenes).find(v => Array.isArray(v)) || [];
+    }
     if (!Array.isArray(scenes) || scenes.length === 0) {
       throw new Error(`Failed to generate scenes ${startScene}-${endScene}`);
     }
