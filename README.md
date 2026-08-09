@@ -33,6 +33,21 @@ You can provide your API keys directly in Railway under your service's **Variabl
 
 ---
 
+## 🔴 YouTube OAuth Setup (Google Cloud Console)
+
+To enable 1-click YouTube upload on Railway (`manwaforge-production.up.railway.app`):
+
+1. Open **[Google Cloud Console Credentials](https://console.cloud.google.com/apis/credentials)**.
+2. Click on your OAuth 2.0 Client ID (`955369702286-3dkhviua9g3d53dm818a4qifd0s1i4k3.apps.googleusercontent.com`).
+3. Under **Authorised JavaScript origins**, add:
+   * `https://manwaforge-production.up.railway.app`
+4. Under **Authorised redirect URIs**, add:
+   * `https://manwaforge-production.up.railway.app/oauth-callback.html`
+   * `https://manwaforge-production.up.railway.app/oauth2callback`
+5. Save changes!
+
+---
+
 ## 🛠️ Features
 
 * **Agent 1 (StoryForge)**: Scrapes webtoon premises, analyzes them, and rebuilds 100% original, copyright-free multi-episode manhwa scripts.
