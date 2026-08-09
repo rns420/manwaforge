@@ -191,7 +191,13 @@
       </div>
 
       <div class="tab-content" id="tab-logs">
-        <div class="terminal-header"><span>🖥️ Agent Activity Log</span><button onclick="document.getElementById('log-terminal').innerHTML=''" class="btn btn-secondary btn-sm">Clear</button></div>
+        <div class="terminal-header">
+          <span>🖥️ Agent Activity Log</span>
+          <div style="display:flex;gap:0.5rem">
+            <button id="btn-copy-logs" class="btn btn-primary btn-sm">📋 Copy Logs</button>
+            <button id="btn-clear-logs" class="btn btn-secondary btn-sm">🗑️ Clear</button>
+          </div>
+        </div>
         <div class="terminal" id="log-terminal"></div>
       </div>
     </section>

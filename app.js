@@ -148,6 +148,14 @@ class ManhwaForge {
       const p = document.getElementById('main-video-player');
       if (p.src) { const a = document.createElement('a'); a.href = p.src; a.download = 'manhwa_episode.webm'; a.click(); }
     });
+    const copyBtn = document.getElementById('btn-copy-logs');
+    if (copyBtn) copyBtn.addEventListener('click', () => this.copyLogs());
+    const clearBtn = document.getElementById('btn-clear-logs');
+    if (clearBtn) clearBtn.addEventListener('click', () => {
+      const term = document.getElementById('log-terminal');
+      if (term) term.innerHTML = '';
+      this.showToast('Log terminal cleared', 'info');
+    });
     this.populateSettingsForm();
     const uri = document.getElementById('redirect-uri-display');
     if (uri) uri.textContent = `${window.location.origin}/oauth-callback.html`;
@@ -277,6 +285,41 @@ class ManhwaForge {
     e.innerHTML = `<span style="color:#475569">[${time}]</span> <span style="color:${c};font-weight:600">${agent}:</span> <span style="color:${lc}">${message}</span>`;
     term.appendChild(e);
     term.scrollTop = term.scrollHeight;
+  }
+
+  copyLogs() {
+    const term = document.getElementById('log-terminal');
+    if (!term) return;
+    const text = term.innerText || term.textContent || '';
+    if (!text.trim()) {
+      this.showToast('No logs to copy', 'warning');
+      return;
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        this.showToast('All activity logs copied to clipboard! 📋', 'success');
+      }).catch(() => {
+        this.fallbackCopyText(text);
+      });
+    } else {
+      this.fallbackCopyText(text);
+    }
+  }
+
+  fallbackCopyText(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand('copy');
+      this.showToast('All activity logs copied to clipboard! 📋', 'success');
+    } catch(e) {
+      this.showToast('Failed to copy logs automatically', 'error');
+    }
+    document.body.removeChild(ta);
   }
 
   updateAgentUI(agentId, status, progress, taskMsg) {
