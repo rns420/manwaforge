@@ -37,10 +37,10 @@ class StoryForgeAgent {
 
     const providers = [
       { name: 'Groq (Llama 3.3 70B)', type: 'groq', model: 'llama-3.3-70b-versatile' },
-      { name: 'OpenRouter (Gemma 2 9B)', type: 'openrouter', model: 'google/gemma-2-9b-it:free' },
-      { name: 'OpenRouter (Llama 3.3 70B)', type: 'openrouter', model: 'meta-llama/llama-3.3-70b-instruct:free' },
+      { name: 'OpenRouter (Llama 3.1 8B)', type: 'openrouter', model: 'meta-llama/llama-3.1-8b-instruct:free' },
+      { name: 'OpenRouter (Mistral 7B)', type: 'openrouter', model: 'mistralai/mistral-7b-instruct:free' },
+      { name: 'OpenRouter (Qwen 2.5 72B)', type: 'openrouter', model: 'qwen/qwen-2.5-72b-instruct:free' },
       { name: 'Pollinations (OpenAI Large)', type: 'pollinations', model: 'openai-large' },
-      { name: 'Pollinations (Qwen Coder)', type: 'pollinations', model: 'qwen-coder' },
       { name: 'APIFreeLLM (GPT-3.5)', type: 'apifreellm', model: 'gpt-3.5-turbo' },
       { name: 'Enally AI', type: 'enally', model: 'default' }
     ];
@@ -64,7 +64,8 @@ class StoryForgeAgent {
             body: JSON.stringify({
               model: p.model,
               messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
-              temperature: 0.7
+              temperature: 0.7,
+              max_tokens: 4096
             })
           });
           if (res.ok) {
@@ -85,10 +86,16 @@ class StoryForgeAgent {
           }
           const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`,
+              'HTTP-Referer': window.location.origin,
+              'X-Title': 'ManhwaForge'
+            },
             body: JSON.stringify({
               model: p.model,
-              messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }]
+              messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+              max_tokens: 4096
             })
           });
           if (res.ok) {
@@ -99,14 +106,8 @@ class StoryForgeAgent {
             continue;
           }
         } else if (p.type === 'pollinations') {
-          const res = await fetch('https://text.pollinations.ai/', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              model: p.model,
-              messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }]
-            })
-          });
+          const pollUrl = `https://text.pollinations.ai/${encodeURIComponent(userPrompt.substring(0, 1500))}?model=${p.model}&system=${encodeURIComponent(systemPrompt.substring(0, 500))}`;
+          const res = await fetch(pollUrl);
           if (res.ok) {
             responseText = await res.text();
           } else {
@@ -168,17 +169,60 @@ class StoryForgeAgent {
     throw new Error(`All AI providers in failover pool failed. Last error: ${lastError ? lastError.message : 'No valid response'}`);
   }
 
+  repairTruncatedJSON(jsonStr) {
+    if (!jsonStr || typeof jsonStr !== 'string') return jsonStr;
+    let s = jsonStr.trim();
+    
+    // 1. Remove trailing commas before } or ]
+    s = s.replace(/,\s*([\}\]])/g, '$1');
+
+    // 2. Fix unclosed strings
+    let inString = false;
+    let lastUnescapedQuote = -1;
+    for (let i = 0; i < s.length; i++) {
+      if (s[i] === '"' && (i === 0 || s[i-1] !== '\\')) {
+        inString = !inString;
+        lastUnescapedQuote = i;
+      }
+    }
+    
+    if (inString && lastUnescapedQuote !== -1) {
+      s += '"';
+    }
+
+    // 3. Remove trailing dangling commas or colons at end of string
+    s = s.replace(/,\s*$/, '').replace(/:\s*"?$/, '');
+
+    // 4. Balance open brackets { and [
+    const stack = [];
+    inString = false;
+    for (let i = 0; i < s.length; i++) {
+      const char = s[i];
+      if (char === '"' && (i === 0 || s[i-1] !== '\\')) {
+        inString = !inString;
+      } else if (!inString) {
+        if (char === '{' || char === '[') stack.push(char);
+        else if (char === '}') { if (stack[stack.length - 1] === '{') stack.pop(); }
+        else if (char === ']') { if (stack[stack.length - 1] === '[') stack.pop(); }
+      }
+    }
+
+    while (stack.length > 0) {
+      const top = stack.pop();
+      s += (top === '{' ? '}' : ']');
+    }
+
+    return s;
+  }
+
   parseAIJSON(text) {
     if (!text || typeof text !== 'string') {
       throw new Error("Invalid or empty text response from AI");
     }
 
     let cleaned = text.trim();
-
-    // 1. Remove markdown code block markers
     cleaned = cleaned.replace(/^```[a-z]*\n?/gi, '').replace(/\n?```$/gi, '').trim();
 
-    // 2. Locate outermost JSON structure ({ ... } or [ ... ])
     const firstBrace = cleaned.search(/[\{\[]/);
     const lastCurly = cleaned.lastIndexOf('}');
     const lastSquare = cleaned.lastIndexOf(']');
@@ -192,11 +236,9 @@ class StoryForgeAgent {
     try {
       return JSON.parse(cleaned);
     } catch (e1) {
-      // Attempt 2: Sanitize trailing commas and unescaped newlines
+      // Attempt 2: Auto-repair truncation & quotes
       try {
-        let repaired = cleaned
-          .replace(/,\s*([\}\]])/g, '$1')
-          .replace(/([\{\s,])(\w+):/g, '$1"$2":');
+        const repaired = this.repairTruncatedJSON(cleaned);
         return JSON.parse(repaired);
       } catch (e2) {
         // Attempt 3: Regex match arrays or objects
@@ -205,12 +247,12 @@ class StoryForgeAgent {
 
         if (arrMatch) {
           try {
-            return JSON.parse(arrMatch[0].replace(/,\s*([\}\]])/g, '$1'));
+            return JSON.parse(this.repairTruncatedJSON(arrMatch[0]));
           } catch (e3) {}
         }
         if (objMatch) {
           try {
-            return JSON.parse(objMatch[0].replace(/,\s*([\}\]])/g, '$1'));
+            return JSON.parse(this.repairTruncatedJSON(objMatch[0]));
           } catch (e4) {}
         }
 
@@ -457,7 +499,7 @@ Return strictly the prompt string, nothing else.`;
 
       const totalEpisodes = window.ManhwaConfig?.pipeline?.episodeCount || 3;
       const targetScenesPerEp = window.ManhwaConfig?.pipeline?.scenesPerEpisode || 250;
-      const batchSize = Math.min(25, targetScenesPerEp);
+      const batchSize = Math.min(10, targetScenesPerEp);
       const totalBatches = Math.ceil(targetScenesPerEp / batchSize);
 
       for (let epNum = 1; epNum <= totalEpisodes; epNum++) {
