@@ -68,6 +68,153 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
+  // AI Proxy Endpoint (Bypasses all browser CORS restrictions)
+  if (pathname === '/api/ai-proxy' && req.method === 'POST') {
+    const body = await parseJSONBody(req);
+    const { provider, model, systemPrompt, userPrompt, apiKey } = body;
+    const https = require('https');
+    
+    try {
+      if (provider === 'groq') {
+        const key = apiKey || process.env.GROQ_API_KEY || process.env.GROQ_KEY || '';
+        if (!key) return sendJSON(res, 400, { error: 'Groq API key missing' });
+        const postData = JSON.stringify({
+          model: model || 'llama-3.3-70b-versatile',
+          messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+          temperature: 0.7,
+          max_tokens: 4096
+        });
+        const gRes = await new Promise((resolve, reject) => {
+          const req = https.request('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${key}`,
+              'Content-Length': Buffer.byteLength(postData)
+            }
+          }, r => {
+            let data = '';
+            r.on('data', c => data += c);
+            r.on('end', () => {
+              try { resolve({ status: r.statusCode, data: JSON.parse(data) }); }
+              catch(e) { resolve({ status: r.statusCode, data: {} }); }
+            });
+          });
+          req.on('error', reject);
+          req.write(postData);
+          req.end();
+        });
+        if (gRes.status === 200 && gRes.data?.choices?.[0]?.message?.content) {
+          return sendJSON(res, 200, { text: gRes.data.choices[0].message.content });
+        }
+        return sendJSON(res, gRes.status || 500, { error: `Groq error ${gRes.status}` });
+      }
+
+      if (provider === 'openrouter') {
+        const key = apiKey || process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_KEY || '';
+        if (!key) return sendJSON(res, 400, { error: 'OpenRouter API key missing' });
+        const postData = JSON.stringify({
+          model: model || 'meta-llama/llama-3.1-8b-instruct:free',
+          messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+          max_tokens: 4096
+        });
+        const oRes = await new Promise((resolve, reject) => {
+          const req = https.request('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${key}`,
+              'HTTP-Referer': 'https://manwaforge.up.railway.app',
+              'X-Title': 'ManhwaForge',
+              'Content-Length': Buffer.byteLength(postData)
+            }
+          }, r => {
+            let data = '';
+            r.on('data', c => data += c);
+            r.on('end', () => {
+              try { resolve({ status: r.statusCode, data: JSON.parse(data) }); }
+              catch(e) { resolve({ status: r.statusCode, data: {} }); }
+            });
+          });
+          req.on('error', reject);
+          req.write(postData);
+          req.end();
+        });
+        if (oRes.status === 200 && oRes.data?.choices?.[0]?.message?.content) {
+          return sendJSON(res, 200, { text: oRes.data.choices[0].message.content });
+        }
+        return sendJSON(res, oRes.status || 500, { error: `OpenRouter error ${oRes.status}` });
+      }
+
+      if (provider === 'pollinations') {
+        const pollUrl = `https://text.pollinations.ai/${encodeURIComponent(userPrompt.substring(0, 1500))}?model=${model || 'openai-large'}&system=${encodeURIComponent(systemPrompt.substring(0, 500))}`;
+        const pText = await new Promise((resolve, reject) => {
+          https.get(pollUrl, r => {
+            let data = '';
+            r.on('data', c => data += c);
+            r.on('end', () => resolve(data));
+          }).on('error', reject);
+        });
+        if (pText && pText.trim()) {
+          return sendJSON(res, 200, { text: pText });
+        }
+        return sendJSON(res, 500, { error: 'Pollinations empty response' });
+      }
+
+      if (provider === 'apifreellm') {
+        const postData = JSON.stringify({
+          model: 'gpt-3.5-turbo',
+          messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }]
+        });
+        const aRes = await new Promise((resolve, reject) => {
+          const req = https.request('https://apifreellm.com/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(postData) }
+          }, r => {
+            let data = '';
+            r.on('data', c => data += c);
+            r.on('end', () => {
+              try { resolve({ status: r.statusCode, data: JSON.parse(data) }); }
+              catch(e) { resolve({ status: r.statusCode, data: {} }); }
+            });
+          });
+          req.on('error', reject);
+          req.write(postData);
+          req.end();
+        });
+        if (aRes.status === 200 && aRes.data?.choices?.[0]?.message?.content) {
+          return sendJSON(res, 200, { text: aRes.data.choices[0].message.content });
+        }
+        return sendJSON(res, aRes.status || 500, { error: `APIFreeLLM error ${aRes.status}` });
+      }
+
+      if (provider === 'enally') {
+        const postData = JSON.stringify({ system: systemPrompt, prompt: userPrompt });
+        const eText = await new Promise((resolve, reject) => {
+          const req = https.request('https://ai.enally.in/api.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(postData) }
+          }, r => {
+            let data = '';
+            r.on('data', c => data += c);
+            r.on('end', () => resolve(data));
+          });
+          req.on('error', reject);
+          req.write(postData);
+          req.end();
+        });
+        if (eText && eText.trim()) {
+          return sendJSON(res, 200, { text: eText });
+        }
+        return sendJSON(res, 500, { error: 'Enally AI empty response' });
+      }
+
+      return sendJSON(res, 400, { error: 'Unknown provider' });
+    } catch (e) {
+      return sendJSON(res, 500, { error: e.message });
+    }
+  }
+
   // Scrape stories
   if (pathname === '/api/scrape-stories' && req.method === 'GET') {
     const site = parsedUrl.searchParams.get('site') || 'Webtoons';

@@ -51,96 +51,54 @@ class StoryForgeAgent {
       try {
         this.log(`Trying provider: ${p.name}...`);
         let responseText = null;
+        const apiKey = await this.getApiKey(p.type === 'groq' ? 'groq' : (p.type === 'openrouter' ? 'openrouter' : ''));
 
-        if (p.type === 'groq') {
-          const apiKey = await this.getApiKey('groq');
-          if (!apiKey) {
-            this.log('Groq API key missing. Skipping...');
-            continue;
-          }
-          const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-            body: JSON.stringify({
-              model: p.model,
-              messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
-              temperature: 0.7,
-              max_tokens: 4096
-            })
-          });
-          if (res.ok) {
-            const data = await res.json();
-            responseText = data.choices?.[0]?.message?.content;
-          } else {
-            this.log(`Groq returned HTTP ${res.status}. Switching to next provider...`);
-            if (res.status === 429) {
-              await new Promise(r => setTimeout(r, 2000));
-            }
-            continue;
-          }
-        } else if (p.type === 'openrouter') {
-          const apiKey = await this.getApiKey('openrouter');
-          if (!apiKey) {
-            this.log('OpenRouter API key missing. Skipping...');
-            continue;
-          }
-          const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${apiKey}`,
-              'HTTP-Referer': window.location.origin,
-              'X-Title': 'ManhwaForge'
-            },
-            body: JSON.stringify({
-              model: p.model,
-              messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
-              max_tokens: 4096
-            })
-          });
-          if (res.ok) {
-            const data = await res.json();
-            responseText = data.choices?.[0]?.message?.content;
-          } else {
-            this.log(`OpenRouter returned HTTP ${res.status}. Switching to next provider...`);
-            continue;
-          }
-        } else if (p.type === 'pollinations') {
-          const pollUrl = `https://text.pollinations.ai/${encodeURIComponent(userPrompt.substring(0, 1500))}?model=${p.model}&system=${encodeURIComponent(systemPrompt.substring(0, 500))}`;
-          const res = await fetch(pollUrl);
-          if (res.ok) {
-            responseText = await res.text();
-          } else {
-            this.log(`Pollinations returned HTTP ${res.status}. Switching to next provider...`);
-            continue;
-          }
-        } else if (p.type === 'apifreellm') {
-          const res = await fetch('https://apifreellm.com/v1/chat/completions', {
+        // 1. Try Backend Proxy (Zero CORS restrictions)
+        try {
+          const proxyUrl = `${window.ManhwaConfig?.endpoints?.pythonServer || ''}/api/ai-proxy`;
+          const proxyRes = await fetch(proxyUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              provider: p.type,
               model: p.model,
-              messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }]
+              systemPrompt,
+              userPrompt,
+              apiKey
             })
           });
-          if (res.ok) {
-            const data = await res.json();
-            responseText = data.choices?.[0]?.message?.content;
-          } else {
-            this.log(`APIFreeLLM returned HTTP ${res.status}. Switching to next provider...`);
-            continue;
+          if (proxyRes.ok) {
+            const proxyData = await proxyRes.json();
+            if (proxyData.text) responseText = proxyData.text;
           }
-        } else if (p.type === 'enally') {
-          const res = await fetch('https://ai.enally.in/api.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ system: systemPrompt, prompt: userPrompt })
-          });
-          if (res.ok) {
-            responseText = await res.text();
-          } else {
-            this.log(`Enally AI returned HTTP ${res.status}. Switching to next provider...`);
-            continue;
+        } catch (proxyErr) {
+          // Backend proxy failed or offline, fall through to direct browser fetch
+        }
+
+        // 2. Direct Browser Fetch Fallback if proxy didn't return text
+        if (!responseText) {
+          if (p.type === 'groq') {
+            if (!apiKey) { this.log('Groq key missing. Skipping...'); continue; }
+            const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+              body: JSON.stringify({ model: p.model, messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], max_tokens: 4096 })
+            });
+            if (res.ok) { const d = await res.json(); responseText = d.choices?.[0]?.message?.content; }
+            else { this.log(`Groq HTTP ${res.status}. Switching...`); continue; }
+          } else if (p.type === 'openrouter') {
+            if (!apiKey) { this.log('OpenRouter key missing. Skipping...'); continue; }
+            const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+              body: JSON.stringify({ model: p.model, messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], max_tokens: 4096 })
+            });
+            if (res.ok) { const d = await res.json(); responseText = d.choices?.[0]?.message?.content; }
+            else { this.log(`OpenRouter HTTP ${res.status}. Switching...`); continue; }
+          } else if (p.type === 'pollinations') {
+            const res = await fetch(`https://text.pollinations.ai/${encodeURIComponent(userPrompt.substring(0,1000))}?model=${p.model}`);
+            if (res.ok) responseText = await res.text();
+            else { this.log(`Pollinations HTTP ${res.status}. Switching...`); continue; }
           }
         }
 
